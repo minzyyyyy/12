@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>알파벳 한글 제시어 낚시 게임</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #1e3c72, #2a5298, #001f3f);
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            user-select: none;
+            /* 마우스 커서를 낚싯대(낚시바늘) 모양으로 변경 */
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23ffeb3b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L5 19"></path><circle cx="18" cy="6" r="2"></circle><path d="M15 11l-3 3"></path></svg>'), auto;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* 상단 UI 정보창 */
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        /* 제시어 안내판 (한글만!) */
+        #instruction {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ffeb3b;
+            font-size: 22px;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 24px;
+            border-radius: 12px;
+            z-index: 10;
+            border: 2px solid #ffeb3b;
+            text-align: center;
+        }
+
+        #instruction span {
+            font-size: 32px;
+            color: #ff5722;
+            background: white;
+            padding: 2px 12px;
+            border-radius: 6px;
+            margin-left: 5px;
+        }
+
+        /* 물고기 스타일 */
+        .fish {
+            position: absolute;
+            width: 100px;
+            height: 60px;
+            background: #ff7f50;
+            border-radius: 50% 50% 40% 40%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23ff5722" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>'), pointer;
+            box-shadow: inset -5px -5px 10px rgba(0,0,0,0.3), 0 5px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s, filter 0.2s;
+        }
+
+        .fish::after {
+            content: '';
+            position: absolute;
+            right: -15px;
+            top: 17px;
+            width: 0;
+            height: 0;
+            border-top: 13px solid transparent;
+            border-bottom: 13px solid transparent;
+            border-left: 22px solid #ff7f50;
+        }
+
+        .fish-eye {
+            position: absolute;
+            left: 22px;
+            top: 16px;
+            width: 9px;
+            height: 9px;
+            background: black;
+            border-radius: 50%;
+        }
+
+        .fish-letter {
+            font-size: 30px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            z-index: 2;
+        }
+
+        /* 모달창 (결과 종합 화면) */
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            z-index: 20;
+            box-shadow: 0 0 30px rgba(255,255,255,0.4);
+        }
+
+        #message-box h1 {
+            margin-top: 0;
+            font-size: 36px;
+        }
+
+        #message-box p {
+            font-size: 22px;
+            margin: 20px 0;
+            line-height: 1.5;
+        }
+
+        #message-box button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            font-size: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #message-box button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui">
+            문제: <span id="current-quiz-num">1</span> / 10 문제<br>
+            남은 기회(목숨): <span id="lives" style="color: #ff5252;">❤️❤️❤️❤️❤️</span>
+        </div>
+        <div id="instruction">
+            제시어: <span id="korean-hint">에이</span>를 찾아라!
+        </div>
+
+        <div id="message-box">
+            <h1 id="modal-title">게임 종료</h1>
+            <p id="modal-text">결과 내용</p>
+            <button onclick="restartGame()">다시하기</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const currentQuizNumEl = document.getElementById('current-quiz-num');
+        const livesEl = document.getElementById('lives');
+        const koreanHintEl = document.getElementById('korean-hint');
+        const messageBox = document.getElementById('message-box');
+        const modalTitle = document.getElementById('modal-title');
+        const modalText = document.getElementById('modal-text');
+
+        // 알파벳 전체 데이터
+        const alphabetData = [
+            { eng: ['A', 'a'], kor: '에이' },
+            { eng: ['B', 'b'], kor: '비' },
+            { eng: ['C', 'c'], kor: '씨' },
+            { eng: ['D', 'd'], kor: '디' },
+            { eng: ['E', 'e'], kor: '이' },
+            { eng: ['F', 'f'], kor: '에프' },
+            { eng: ['G', 'g'], kor: '지' },
+            { eng: ['H', 'h'], kor: '에이치' },
+            { eng: ['I', 'i'], kor: '아이' },
+            { eng: ['J', 'j'], kor: '제이' },
+            { eng: ['K', 'k'], kor: '케이' },
+            { eng: ['L', 'l'], kor: '엘' },
+            { eng: ['M', 'm'], kor: '엠' },
+            { eng: ['N', 'n'], kor: '엔' },
+            { eng: ['O', 'o'], kor: '오' },
+            { eng: ['P', 'p'], kor: '피' },
+            { eng: ['Q', 'q'], kor: '큐' },
+            { eng: ['R', 'r'], kor: '알' },
+            { eng: ['S', 's'], kor: '에스' },
+            { eng: ['T', 't'], kor: '티' },
+            { eng: ['U', 'u'], kor: '유' },
+            { eng: ['V', 'v'], kor: '브이' },
+            { eng: ['W', 'w'], kor: '더블유' },
+            { eng: ['X', 'x'], kor: '엑스' },
+            { eng: ['Y', 'y'], kor: '와이' },
+            { eng: ['Z', 'z'], kor: '제트' }
+        ];
+
+        let quizList = [];
+        let currentQuizIndex = 0;
+        let score = 0;
+        let wrongCount = 0;
+        let fishList = [];
+        let gameIsOver = false;
+
+        function shuffleArray(array) {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function initGame() {
+            const shuffled = shuffleArray(alphabetData);
+            quizList = shuffled.slice(0, 10);
+            
+            currentQuizIndex = 0;
+            score = 0;
+            wrongCount = 0;
+            gameIsOver = false;
+            messageBox.style.display = 'none';
+
+            updateUI();
+            updateInstruction();
+            
+            // 게임 시작 시 기존 물고기들 싹 지우고 새 문제에 맞는 물고기들로 즉시 채우기
+            fishList.forEach(fish => fish.element.remove());
+            fishList = [];
+            for (let i = 0; i < 10; i++) {
+                fishList.push(new Fish(true)); // 강제로 정답이 최소 몇 마리 들어가도록 생성
+            }
+        }
+
+        function updateUI() {
+            currentQuizNumEl.innerText = currentQuizIndex + 1;
+            let hearts = '❤️'.repeat(5 - wrongCount);
+            if (hearts === '') hearts = '❌ 없음';
+            livesEl.innerText = hearts;
+        }
+
+        function updateInstruction() {
+            if (currentQuizIndex < 10) {
+                const current = quizList[currentQuizIndex];
+                koreanHintEl.innerText = current.kor;
+            }
+        }
+
+        class Fish {
+            constructor(forceAnswer = false) {
+                this.element = document.createElement('div');
+                this.element.className = 'fish';
+
+                const eye = document.createElement('div');
+                eye.className = 'fish-eye';
+                this.element.appendChild(eye);
+
+                let letter;
+                if (!gameIsOver && currentQuizIndex < 10) {
+                    const currentQuiz = quizList[currentQuizIndex];
+                    
+                    // 첫 생성 시 정답을 강제로 보장하거나, 확률을 70%로 매우 높여서 제시 글자가 무조건 보이게 함
+                    if (forceAnswer || Math.random() < 0.70) {
+                        letter = Math.random() < 0.5 ? currentQuiz.eng[0] : currentQuiz.eng[1];
+                    } else {
+                        const randomOther = alphabetData[Math.floor(Math.random() * alphabetData.length)];
+                        letter = Math.random() < 0.5 ? randomOther.eng[0] : randomOther.eng[1];
+                    }
+                } else {
+                    letter = 'A';
+                }
+                this.letter = letter;
+
+                const letterEl = document.createElement('div');
+                letterEl.className = 'fish-letter';
+                letterEl.innerText = letter;
+                this.element.appendChild(letterEl);
+
+                this.x = Math.random() * (window.innerWidth - 120);
+                this.y = 120 + Math.random() * (window.innerHeight - 220);
+                this.speed = (Math.random() * 1.5 + 0.9) * (Math.random() < 0.5 ? 1 : -1);
+                
+                if (this.speed < 0) {
+                    this.element.style.transform = 'scaleX(-1)';
+                }
+
+                this.element.style.left = `${this.x}px`;
+                this.element.style.top = `${this.y}px`;
+
+                this.element.addEventListener('click', () => {
+                    if (gameIsOver) return;
+
+                    const currentQuiz = quizList[currentQuizIndex];
+
+                    if (this.letter === currentQuiz.eng[0] || this.letter === currentQuiz.eng[1]) {
+                        score++;
+                        createBubble(this.x + 50, this.y);
+                        this.remove();
+
+                        currentQuizIndex++;
+
+                        if (currentQuizIndex >= 10) {
+                            endGame(true);
+                        } else {
+                            updateUI();
+                            updateInstruction();
+                            // 정답을 맞추면 화면에 있는 물고기 중 일부를 새 문제의 정답으로 즉시 바꿔서 바로 찾을 수 있게 함
+                            refreshFishLetters();
+                        }
+                    } else {
+                        wrongCount++;
+                        updateUI();
+
+                        this.element.style.filter = 'brightness(0.2)';
+                        setTimeout(() => {
+                            this.element.style.filter = 'none';
+                        }, 250);
+
+                        if (wrongCount >= 5) {
+                            endGame(false);
+                        }
+                    }
+                });
+
+                gameContainer.appendChild(this.element);
+            }
+
+            update() {
+                this.x += this.speed;
+                if (this.x > window.innerWidth - 110 || this.x < 0) {
+                    this.speed *= -1;
+                    this.element.style.transform = this.speed < 0 ? 'scaleX(-1)' : 'scaleX(1)';
+                }
+                this.element.style.left = `${this.x}px`;
+            }
+
+            remove() {
+                this.element.remove();
+                fishList = fishList.filter(f => f !== this);
+            }
+        }
+
+        // 새 문제로 넘어갔을 때 화면의 물고기 중 일부를 즉시 새로운 정답 글자로 바꿔주는 함수
+        function refreshFishLetters() {
+            if (currentQuizIndex >= 10) return;
+            const currentQuiz = quizList[currentQuizIndex];
+            fishList.forEach((fish, index) => {
+                if (index % 2 === 0) { // 절반의 물고기를 새 정답(대/소문자)으로 교체
+                    fish.letter = Math.random() < 0.5 ? currentQuiz.eng[0] : currentQuiz.eng[1];
+                    fish.element.querySelector('.fish-letter').innerText = fish.letter;
+                }
+            });
+        }
+
+        function createBubble(x, y) {
+            for (let i = 0; i < 4; i++) {
+                const bubble = document.createElement('div');
+                bubble.style.position = 'absolute';
+                bubble.style.left = `${x + (Math.random() * 30 - 15)}px`;
+                bubble.style.top = `${y}px`;
+                bubble.style.width = `${Math.random() * 12 + 6}px`;
+                bubble.style.height = bubble.style.width;
+                bubble.style.background = 'rgba(255, 255, 255, 0.7)';
+                bubble.style.borderRadius = '50%';
+                bubble.style.zIndex = '5';
+                bubble.style.transition = 'all 0.8s ease-out';
+                gameContainer.appendChild(bubble);
+
+                setTimeout(() => {
+                    bubble.style.top = `${y - 70 - Math.random() * 50}px`;
+                    bubble.style.opacity = '0';
+                }, 50);
+
+                setTimeout(() => bubble.remove(), 850);
+            }
+        }
+
+        function gameLoop() {
+            if (gameIsOver) return;
+
+            fishList.forEach(fish => fish.update());
+
+            if (fishList.length < 10) {
+                // 새로운 물고기가 나올 때도 높은 확률로 정답이 포함되도록 함
+                fishList.push(new Fish(Math.random() < 0.4));
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame(isWin) {
+            gameIsOver = true;
+            
+            if (isWin) {
+                modalTitle.innerText = "🏆 게임 클리어! 🏆";
+                modalTitle.style.color = "#4CAF50";
+                modalText.innerHTML = `대단해요! 10문제를 모두 맞혔습니다!<br><br>🎯 <b>맞춘 개수:</b> ${score}개 / 10문제<br>❌ <b>틀린 횟수:</b> ${wrongCount}회`;
+            } else {
+                modalTitle.innerText = "💥 게임 오버! 💥";
+                modalTitle.style.color = "#ff5252";
+                modalText.innerHTML = `아쉽네요! 5번 이상 틀렸습니다.<br><br>🎯 <b>맞춘 개수:</b> ${score}개 / 10문제<br>❌ <b>틀린 횟수:</b> ${wrongCount}회`;
+            }
+            messageBox.style.display = 'block';
+        }
+
+        function restartGame() {
+            fishList.forEach(fish => fish.element.remove());
+            fishList = [];
+            initGame();
+            gameLoop();
+        }
+
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
